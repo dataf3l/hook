@@ -15,11 +15,11 @@ import (
 
 // Configuration struct
 type Configuration struct {
-	Commands     string
-	Dev          string
-	Master       string
-	Emails       []string
-	SlackWebhook string
+	Commands     string   `json:"commands"`
+	Dev          string   `json:"dev"`
+	Master       string   `json:"master"`
+	Emails       []string `json:"emails"`
+	SlackWebhook string   `json:"slack_webhook"`
 }
 
 // SlackRequestBody is Slack request structure
@@ -92,7 +92,10 @@ func GetConfig(filePath string) Configuration {
 // some text and the slack channel is saved within Slack.
 func SendSlackNotification(webhookURL string, msg string) error {
 
-	slackBody, _ := json.Marshal(SlackRequestBody{Text: msg})
+	slackBody, err := json.Marshal(SlackRequestBody{Text: msg})
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequest(http.MethodPost, webhookURL, bytes.NewBuffer(slackBody))
 	if err != nil {
 		return err
