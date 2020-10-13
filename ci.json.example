@@ -1,0 +1,10 @@
+{
+    "commands": "./command.txt",
+    "dev": "/some/folder/dev",
+    "master": "/some/folder/master",
+    "emails": [
+        "somebody@gmail.com",
+        "somebodyelse@gmail.com"
+    ],
+    "slack_webhook": "…."
+}
