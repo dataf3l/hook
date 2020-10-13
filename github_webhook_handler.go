@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"time"
+	"net/smtp"
 )
 
 // Configuration struct
@@ -20,6 +21,8 @@ type Configuration struct {
 	Master       string   `json:"master"`
 	Emails       []string `json:"emails"`
 	SlackWebhook string   `json:"slack_webhook"`
+	Port		 string	  `json:"port"`
+
 }
 
 // SlackRequestBody is Slack request structure
@@ -48,7 +51,7 @@ func main() {
 		}
 	})
 
-	http.ListenAndServe(":7629", nil)
+	http.ListenAndServe(":"+config.Port, nil)
 }
 
 // ReadCommand read commands from text file, which will get executed in whole program
@@ -115,4 +118,36 @@ func SendSlackNotification(webhookURL string, msg string) error {
 		return errors.New("Non-ok response returned from Slack")
 	}
 	return nil
+}
+
+func SendMailNotification(Emails []string){
+
+	// Sender data.
+	from := os.Getenv("FROM_EMAIL")
+	password := os.Getenv("PASS_EMAIL")
+  
+	// Receiver email address.
+
+	//to := []string{
+	//  "sender@example.com",
+	//}
+	
+	// to := Emails
+	// smtp server configuration.
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+  
+	// Message.
+	message := []byte("This is a test email message.")
+	
+	// Authentication.
+	auth := smtp.PlainAuth("", from, password, smtpHost)
+	
+	// Sending email.
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, Emails, message)
+	if err != nil {
+		fmt.Println(err)
+		return
+	  }
+	  fmt.Println("Email Sent Successfully!")
 }
