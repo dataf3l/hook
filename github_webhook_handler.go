@@ -120,7 +120,7 @@ func SendSlackNotification(webhookURL string, msg string) error {
 	return nil
 }
 
-func SendMailNotification(Emails []string){
+func SendMailNotification(Emails []string, body string){
 
 	// Sender data.
 	from := os.Getenv("FROM_EMAIL")
@@ -138,7 +138,7 @@ func SendMailNotification(Emails []string){
 	smtpPort := "587"
   
 	// Message.
-	message := []byte("This is a test email message.")
+	message := []byte(body)
 	
 	// Authentication.
 	auth := smtp.PlainAuth("", from, password, smtpHost)
