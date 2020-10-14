@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/smtp"
 	"os"
 	"os/exec"
 	"time"
-	"net/smtp"
 )
 
 // Configuration struct
@@ -21,8 +21,9 @@ type Configuration struct {
 	Master       string   `json:"master"`
 	Emails       []string `json:"emails"`
 	SlackWebhook string   `json:"slack_webhook"`
-	Port		 string	  `json:"port"`
-
+	Port         string   `json:"port"`
+	EventName    string   `json:"event_name"`
+	Ref          string   `json:"ref"`
 }
 
 // SlackRequestBody is Slack request structure
@@ -37,13 +38,19 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		Commands := ReadCommand(config.Commands)
 		for _, Command := range Commands {
+			//read json
 			cmd := exec.Command("sh", "-c", Command)
 			CommandOutput, err := cmd.CombinedOutput()
+			//send stdout on email
+			SendMailNotification(config.Emails, string(Command)+" At: "+time.Now().String(), string(CommandOutput))
+			SendSlackNotification(config.SlackWebhook, "Command Success: "+string(Command)+" At: "+time.Now().String())
 			if err != nil {
 				log.Println(Command, err)
 				fmt.Fprintf(w, "FAILED for Command : "+string(Command))
 				// time.Now().String() to get server time
 				SendSlackNotification(config.SlackWebhook, "FAILED for Command : "+string(Command)+" At: "+time.Now().String())
+				SendMailNotification(config.Emails, Command, "FAILED for Command : "+string(Command)+" At: "+time.Now().String())
+
 				return
 			}
 			log.Println(string(CommandOutput))
@@ -120,34 +127,37 @@ func SendSlackNotification(webhookURL string, msg string) error {
 	return nil
 }
 
-func SendMailNotification(Emails []string, body string){
+func SendMailNotification(Emails []string, Command string, CommandOutput string) {
 
 	// Sender data.
 	from := os.Getenv("FROM_EMAIL")
 	password := os.Getenv("PASS_EMAIL")
-  
+
+	// add subject
+
 	// Receiver email address.
 
 	//to := []string{
 	//  "sender@example.com",
 	//}
-	
+
 	// to := Emails
 	// smtp server configuration.
 	smtpHost := "smtp.gmail.com"
 	smtpPort := "587"
-  
+
 	// Message.
-	message := []byte(body)
-	
+	message := []byte("Subject:" + Command + "\n\n" +
+		CommandOutput)
+
 	// Authentication.
 	auth := smtp.PlainAuth("", from, password, smtpHost)
-	
+
 	// Sending email.
 	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, Emails, message)
 	if err != nil {
 		fmt.Println(err)
 		return
-	  }
-	  fmt.Println("Email Sent Successfully!")
+	}
+	fmt.Println("Email Sent Successfully!")
 }
