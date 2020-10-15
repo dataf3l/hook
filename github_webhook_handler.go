@@ -23,7 +23,12 @@ type Configuration struct {
 	SlackWebhook string   `json:"slack_webhook"`
 	Port         string   `json:"port"`
 	EventName    string   `json:"event_name"`
-	Ref          string   `json:"ref"`
+}
+
+type Payload struct {
+	ObjectKind string `json:"object_kind"`
+	EventName  string `json:"event_name"`
+	Ref        string `json:"ref"`
 }
 
 // SlackRequestBody is Slack request structure
@@ -59,6 +64,19 @@ func main() {
 	})
 
 	http.ListenAndServe(":"+config.Port, nil)
+}
+
+func PayloadParser(r *http.Request) Payload {
+
+	decoder := json.NewDecoder(r.Body)
+	payload := Payload{}
+	err := decoder.Decode(&payload)
+
+	if err != nil {
+		panic(err)
+	}
+	return payload
+
 }
 
 // ReadCommand read commands from text file, which will get executed in whole program
