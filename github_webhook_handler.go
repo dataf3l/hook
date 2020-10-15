@@ -8,14 +8,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/smtp"
 	"os"
 	"os/exec"
 	"time"
+	"gopkg.in/gomail.v2"
+	"strings"
 )
 
 // Configuration struct
 type Configuration struct {
+	ProjectName  string   `json:"project_name"`
 	Commands     string   `json:"commands"`
 	Dev          string   `json:"dev"`
 	Master       string   `json:"master"`
@@ -35,32 +37,159 @@ type Payload struct {
 type SlackRequestBody struct {
 	Text string `json:"text"`
 }
+func Now() string{
+	return time.Now().Format("2006-01-02 15:04:05-0700")
+}
+type Logger interface {
+	AddEvent(title string, body string,extra string, istatus int, cmdIndex int, total int)
+	GetLog() string
+}
+type SLogger struct {
+	MessageSeparator string
+	TitleStart       string
+	TitleEnd         string
+	GoodColorStart   string
+	BadColorStart    string
+        ColorEnd         string
+	Start            string
+	End              string
+	SuccessIcon      string
+	FailIcon         string
+	MessageStart     string
+	MessageEnd       string
+	Events           []string
+}
+func (log *SLogger) AddEvent(title string, body string, extra string, istatus int, cmdIndex int, total int) {
+	statusMsg := ""
+	if istatus == 0 {
+		statusMsg = log.SuccessIcon
+		title = log.GoodColorStart + title + log.ColorEnd
+	}else{
+		statusMsg = log.FailIcon
+		title = log.BadColorStart + title + log.ColorEnd
+	}
+	//mtitle := fmt.Sprintf("\n------------ [%d/%d %s] -------------\n",cmdIndex,total,statusMsg)
+	//mtitle := fmt.Sprintf("\n------------ [%d/%d %s] -------------\n",cmdIndex,total,statusMsg)
+	if extra != "" {
+		body += log.BadColorStart + extra + log.ColorEnd
+	}
+	log.Events = append(log.Events, fmt.Sprintf("%s %s %s [%d/%d] \n %s%s%s",log.MessageSeparator ,  statusMsg, title, cmdIndex, total, log.MessageStart, body ,  log.MessageEnd))
+}
+func (log *SLogger) GetLog(iproc int) string {
+	out := ""
+	if iproc == 0 {
+		out += log.GoodColorStart + log.TitleStart + "SUCCESS " + log.SuccessIcon + log.TitleEnd + log.ColorEnd
+	}else{
+		out += log.BadColorStart  + log.TitleStart + "FAIL "    + log.FailIcon    + log.TitleEnd + log.ColorEnd
+	}
+	out += "\n\n"
+	out += log.Start
+	for _, msg := range log.Events {
+		out += msg
+	}
+	out += log.End
+	return out
+}
+// GetLoggers will returns loggers for the Email, Slack and the Console
+// Console is assumed ansi:
+// https://stackoverflow.com/questions/5947742/how-to-change-the-output-color-of-echo-in-linux
+//
+// Slack doesn't support colors.
+//
+// Email supports some html
+func GetLoggers() []SLogger {
+	ml := SLogger {MessageSeparator:"<hr/>",
+		      TitleStart: "<h2>",
+		      TitleEnd: "</h2>",
+		      GoodColorStart:"<font color=green>",
+		      BadColorStart:"<font color=red>",
+		      ColorEnd:"</font>",
+	              Start:"<pre>",
+		      End:"</pre>",
+		      SuccessIcon:"&#9989;",
+		      FailIcon:"&#10060;",
+		      MessageStart:"<pre>",
+		      MessageEnd:"</pre>",
+	              Events:[]string{}}
 
+	sl := SLogger {MessageSeparator:"",
+		      TitleStart: "",
+		      TitleEnd: "",
+		      GoodColorStart:"",
+		      BadColorStart:"",
+		      ColorEnd:"",
+		      Start:"",
+		      End:"",
+		      SuccessIcon:"✅", // "\x27\x05",
+		      FailIcon:"❌",
+		      MessageStart:"\n```\n",
+		      MessageEnd:"\n```\n",
+	              Events:[]string{}}
+
+	cl := SLogger {MessageSeparator:"-------------------------------------",
+		      TitleStart: "",
+		      TitleEnd: "",
+		      GoodColorStart:"\\033[0;32m",
+		      BadColorStart:"\\033[0;31m",
+		      ColorEnd:"\033[0m",
+		      End:"",
+		      SuccessIcon:"✅",
+		      FailIcon:"❌", // "\x27\x4C",
+		      MessageStart:"\n",
+		      MessageEnd:"\n",
+	              Events:[]string{}}
+	loggers := []SLogger {ml, sl, cl}
+	return loggers
+}
 func main() {
 	config := GetConfig("./ci.json")
 	// fmt.Println(config)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		Commands := ReadCommand(config.Commands)
-		for _, Command := range Commands {
+		loggers := GetLoggers()
+		commands := ReadCommand(config.Commands)
+		count:= 0
+		iproc := 0
+		for cmdIndex, Command := range commands {
 			//read json
 			cmd := exec.Command("sh", "-c", Command)
-			CommandOutput, err := cmd.CombinedOutput()
-			//send stdout on email
-			SendMailNotification(config.Emails, string(Command)+" At: "+time.Now().String(), string(CommandOutput))
-			SendSlackNotification(config.SlackWebhook, "Command Success: "+string(Command)+" At: "+time.Now().String())
-			if err != nil {
-				log.Println(Command, err)
-				fmt.Fprintf(w, "FAILED for Command : "+string(Command))
-				// time.Now().String() to get server time
-				SendSlackNotification(config.SlackWebhook, "FAILED for Command : "+string(Command)+" At: "+time.Now().String())
-				SendMailNotification(config.Emails, Command, "FAILED for Command : "+string(Command)+" At: "+time.Now().String())
+			commandOutputBytes, err := cmd.CombinedOutput()
+			commandOutput := string(commandOutputBytes)
 
-				return
+			//send stdout on email
+			istatus := 0
+			extra := ""
+			if err != nil {
+				istatus = 1
+				iproc = 1
+				extra = "\n" + err.Error()
 			}
-			log.Println(string(CommandOutput))
-			fmt.Fprintf(w, "ALL OK:\n"+string(CommandOutput))
+			for lid := range loggers {
+				mtitle := Command
+				loggers[lid].AddEvent(mtitle, commandOutput , extra, istatus, cmdIndex + 1, len(commands))
+			}
+			count++
+			if err != nil {
+				break
+			}
+
 		}
+		slackSubject := fmt.Sprintf("%s: %d/%d ", config.ProjectName, count, len(commands))
+
+		processStatusMessages := []string{"ALL OK ✅ ","FAIL ❌ "}
+		subject := fmt.Sprintf("%s: %s %d/%d ", config.ProjectName, processStatusMessages[iproc], count, len(commands))
+		emailSubject := subject + Now()
+
+		// Send message to participants of the project:
+		SendSlackNotification(config.SlackWebhook, slackSubject + "\n\n" + loggers[1].GetLog(iproc))
+		SendEmailNotification2(emailSubject,loggers[0].GetLog(iproc),config.Emails)
+
+		// For the logs
+		log.Println(loggers[2].GetLog(iproc))
+
+		// For the web user
+		fmt.Fprintf(w, loggers[0].GetLog(iproc))
+
 	})
 
 	http.ListenAndServe(":"+config.Port, nil)
@@ -145,37 +274,19 @@ func SendSlackNotification(webhookURL string, msg string) error {
 	return nil
 }
 
-func SendMailNotification(Emails []string, Command string, CommandOutput string) {
+func SendEmailNotification2(subject string, body string, to []string) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", "leadrepository@gmail.com")
+	m.SetHeader("To", strings.Join(to, ","))
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
 
-	// Sender data.
-	from := os.Getenv("FROM_EMAIL")
-	password := os.Getenv("PASS_EMAIL")
+	d := gomail.NewDialer("smtp.gmail.com", 587, os.Getenv("FROM_EMAIL"), os.Getenv("PASS_EMAIL"))
 
-	// add subject
-
-	// Receiver email address.
-
-	//to := []string{
-	//  "sender@example.com",
-	//}
-
-	// to := Emails
-	// smtp server configuration.
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-
-	// Message.
-	message := []byte("Subject:" + Command + "\n\n" +
-		CommandOutput)
-
-	// Authentication.
-	auth := smtp.PlainAuth("", from, password, smtpHost)
-
-	// Sending email.
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, Emails, message)
-	if err != nil {
-		fmt.Println(err)
-		return
+	if err := d.DialAndSend(m); err != nil {
+		log.Println("Sending the email failed:" + err.Error())
+		return err
 	}
-	fmt.Println("Email Sent Successfully!")
+	return nil
 }
+
