@@ -7,4 +7,9 @@
         "somebodyelse@gmail.com"
     ],
     "slack_webhook": "…."
+    "smtp_from":"support@...",
+    "smtp_host":"email-smtp.us-west-2.amazonaws.com",
+    "smtp_port":"587",
+    "smtp_user":"...",
+    "smtp_pass":"..."
 }

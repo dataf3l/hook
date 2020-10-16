@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"time"
 	"gopkg.in/gomail.v2"
-	"strings"
 )
 
 // Configuration struct
@@ -25,6 +24,12 @@ type Configuration struct {
 	SlackWebhook string   `json:"slack_webhook"`
 	Port         string   `json:"port"`
 	EventName    string   `json:"event_name"`
+	SMTPFrom     string   `json:"smtp_from"`
+	SMTPHost     string   `json:"smtp_host"`
+	SMTPPort     string   `json:"smtp_port"`
+	SMTPUser     string   `json:"smtp_user"`
+	SMTPPass     string   `json:"smtp_pass"`
+
 }
 
 type Payload struct {
@@ -142,10 +147,12 @@ func GetLoggers() []SLogger {
 	return loggers
 }
 func main() {
-	config := GetConfig("./ci.json")
 	// fmt.Println(config)
 
+	config := GetConfig("./ci.json")
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		config := GetConfig("./ci.json")
+
 		loggers := GetLoggers()
 		commands := ReadCommand(config.Commands)
 		count:= 0
@@ -181,8 +188,14 @@ func main() {
 		emailSubject := subject + Now()
 
 		// Send message to participants of the project:
-		SendSlackNotification(config.SlackWebhook, slackSubject + "\n\n" + loggers[1].GetLog(iproc))
-		SendEmailNotification2(emailSubject,loggers[0].GetLog(iproc),config.Emails)
+		err := SendSlackNotification(config.SlackWebhook, slackSubject + "\n\n" + loggers[1].GetLog(iproc))
+		if err != nil {
+			log.Println("Slack Sending failed:",err)
+		}
+		err = SendEmailNotification2(emailSubject,loggers[0].GetLog(iproc),config.Emails)
+		if err != nil {
+			log.Println("Email sending failed:",err)
+		}
 
 		// For the logs
 		log.Println(loggers[2].GetLog(iproc))
@@ -275,13 +288,17 @@ func SendSlackNotification(webhookURL string, msg string) error {
 }
 
 func SendEmailNotification2(subject string, body string, to []string) error {
+	config := GetConfig("./ci.json")
 	m := gomail.NewMessage()
-	m.SetHeader("From", "leadrepository@gmail.com")
-	m.SetHeader("To", strings.Join(to, ","))
+	m.SetHeader("From", config.SMTPFrom)
+	m.SetHeader("To", to...)
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", body)
-
-	d := gomail.NewDialer("smtp.gmail.com", 587, os.Getenv("FROM_EMAIL"), os.Getenv("PASS_EMAIL"))
+	port, err:= strconv.Atoi(config.SMTPPort)
+	if err != nil {
+		port = 587
+	}
+	d := gomail.NewDialer(config.SMTPHost, port, config.SMTPUser, config.SMTPPass)
 
 	if err := d.DialAndSend(m); err != nil {
 		log.Println("Sending the email failed:" + err.Error())
