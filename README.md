@@ -42,6 +42,49 @@ go build
 etc...
 ```
 
+
+# Restarter (see restarter subfolder)
+
+## compiling
+
+OSX:
+```
+go build
+```
+
+Linux:
+```
+GOOS=linux GOARCH=amd64 go build -o ./sc_linux
+```
+
+## Usage:
+
+./restarter ./example_process ./buildandrun.sh 7415
+
+example_process is some folder name where your binary resides.
+buildandrun.sh  is your recompile-and-if-successful-restart process
+
+## restarting processes:
+
+```
+curl http://127.0.0.1:7415/v1/restart_process
+```
+
+## checking process status
+
+```
+curl http://127.0.0.1:7415/v1/status
+```
+
+checking if your thing is running (for debugging restarter):
+
+```
+watch 'ps aux|grep example |grep -v aux |grep -v "grep example"'
+```
+
+# Notes on systemctl
+
+
 it is also recommended the tool is added to a systemctl unit file, so
 you it is't stopped once the server restarts.
 
@@ -51,4 +94,7 @@ you can for example, deploy only if the tool succeeded.
 We hope this tool will help you save time.
 
 Don't forget to star the repo! :)
+
+
+
 

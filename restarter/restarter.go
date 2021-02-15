@@ -117,3 +117,6 @@ func main() {
 // https://superuser.com/questions/140461/using-watch-with-pipes
 // https://medium.com/@felixge/killing-a-child-process-and-all-of-its-children-in-go-54079af94773
 // https://golangcode.com/handle-ctrl-c-exit-in-terminal/
+// https://stackoverflow.com/questions/39508086/golang-exec-background-process-and-get-its-pid
+// https://coderwall.com/p/ik5xxa/run-a-subprocess-and-connect-to-it-with-golang
+
