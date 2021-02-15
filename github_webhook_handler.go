@@ -182,14 +182,18 @@ func main() {
 			}
 
 		}
-		slackSubject := fmt.Sprintf("%s: %d/%d ", config.ProjectName, count, len(commands))
+		hostName, err := os.Hostname()
+		if err != nil {
+			hostName = "unknownHostName"
+		}
+		slackSubject := fmt.Sprintf("%s@%s: %d/%d ", config.ProjectName,hostName, count, len(commands))
 
 		processStatusMessages := []string{"ALL OK ✅ ","FAIL ❌ "}
-		subject := fmt.Sprintf("%s: %s %d/%d ", config.ProjectName, processStatusMessages[iproc], count, len(commands))
+		subject := fmt.Sprintf("%s@%s: %s %d/%d ", config.ProjectName, hostName, processStatusMessages[iproc], count, len(commands))
 		emailSubject := subject + Now()
 
 		// Send message to participants of the project:
-		err := SendSlackNotification(config.SlackWebhook, slackSubject + "\n\n" + loggers[1].GetLog(iproc))
+		err = SendSlackNotification(config.SlackWebhook, slackSubject + "\n\n" + loggers[1].GetLog(iproc))
 		if err != nil {
 			log.Println("Slack Sending failed:",err)
 		}
